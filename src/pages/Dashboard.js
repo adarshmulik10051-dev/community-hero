@@ -1,28 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { Line, Doughnut } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, ArcElement, Tooltip, Legend } from 'chart.js';
+import { db } from '../firebase';
+import { collection, onSnapshot } from 'firebase/firestore';
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, ArcElement, Tooltip, Legend);
 
-const GEMINI_API_KEY = 'AQ.Ab8RN6INa3BJzqhPU9lAtAXqGF8spBizHj_o2fzJTBoOKm_uuA';
-const getAIInsights = async () => {
+const getAIInsights = async (stats) => {
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.REACT_APP_GEMINI_KEY}`,
     {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': GEMINI_API_KEY
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{
           parts: [{ text: `You are an AI analyst for a Mumbai civic issue platform.
-Generate 4 short AI insights based on this data:
-- Andheri East: 234 issues (highest)
-- Garbage complaints up this week
-- Road damage complaints down after Ward A repairs
-- Ward B: 89 unresolved issues
-- Water complaints spiked near Kurla
-- Flood risk high due to blocked drainage
+Generate 4 short AI insights based on this REAL data:
+- Total issues: ${stats.total}
+- Critical issues: ${stats.critical}
+- Pending issues: ${stats.pending}
+- Most common category: ${stats.topCategory}
+- Resolved: ${stats.resolved}
 
 Return ONLY a JSON array with 4 items:
 [
@@ -31,8 +28,7 @@ Return ONLY a JSON array with 4 items:
   {"type": "bad", "icon": "⚠️", "text": "insight text here"},
   {"type": "warn", "icon": "💧", "text": "insight text here"}
 ]
-type must be: good, bad, or warn
-Keep each insight under 15 words.` }]
+type must be: good, bad, or warn. Keep each insight under 15 words.` }]
         }],
         generationConfig: { temperature: 0.8, maxOutputTokens: 300 }
       })
@@ -45,18 +41,41 @@ Keep each insight under 15 words.` }]
 };
 
 export default function Dashboard() {
+  const [issues, setIssues] = useState([]);
+  const [stats, setStats] = useState({ total: 0, resolved: 0, critical: 0, pending: 0, topCategory: 'Road Damage' });
   const [insights, setInsights] = useState([
-    { icon: '📈', text: 'Garbage complaints increased by 32% in Andheri East.', type: 'warn' },
-    { icon: '📉', text: 'Road damage complaints down 15% after Ward A repairs.', type: 'good' },
-    { icon: '⚠️', text: 'Ward B has highest unresolved issues — 89 pending.', type: 'bad' },
-    { icon: '💧', text: 'Water complaints spiked 45% near Kurla this week.', type: 'warn' },
+    { icon: '📈', text: 'Loading real AI insights from your data...', type: 'warn' },
+    { icon: '📉', text: 'Connecting to Firebase...', type: 'good' },
+    { icon: '⚠️', text: 'Analyzing reported issues...', type: 'bad' },
+    { icon: '💧', text: 'Generating predictions...', type: 'warn' },
   ]);
   const [aiLoading, setAiLoading] = useState(false);
+  const [catData, setCatData] = useState([0, 0, 0, 0, 0, 0]);
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'issues'), (snap) => {
+      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setIssues(data);
+
+      const total = data.length;
+      const critical = data.filter(i => i.severity === 'Critical').length;
+      const resolved = data.filter(i => i.status === 'Resolved').length;
+      const pending = data.filter(i => i.status === 'Pending').length;
+
+      const cats = ['Road Damage', 'Garbage', 'Water Supply', 'Street Light', 'Sewage', 'Other'];
+      const counts = cats.map(c => data.filter(i => i.category === c).length);
+      setCatData(counts);
+
+      const topCategory = cats[counts.indexOf(Math.max(...counts))] || 'Road Damage';
+      setStats({ total, critical, resolved, pending, topCategory });
+    });
+    return () => unsub();
+  }, []);
 
   const refreshInsights = async () => {
     setAiLoading(true);
     try {
-      const newInsights = await getAIInsights();
+      const newInsights = await getAIInsights(stats);
       setInsights(newInsights);
     } catch (err) {
       console.error('Insights error:', err);
@@ -64,24 +83,26 @@ export default function Dashboard() {
     setAiLoading(false);
   };
 
-  const lineData = {
-    labels: ['Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan'],
-    datasets: [
-      { label: 'Reported', data: [180, 220, 195, 310, 280, 240], borderColor: '#178FDD', tension: 0.4, fill: false },
-      { label: 'Resolved', data: [120, 170, 155, 240, 230, 190], borderColor: '#639922', tension: 0.4, fill: false, borderDash: [6, 3] },
-    ],
-  };
+  const resolvedPct = stats.total > 0 ? Math.round((stats.resolved / stats.total) * 100) : 0;
 
   const doughnutData = {
     labels: ['Road', 'Garbage', 'Water', 'Light', 'Sewage', 'Other'],
-    datasets: [{ data: [34, 22, 18, 12, 9, 5], backgroundColor: ['#178FDD', '#639922', '#1D9E75', '#EF9F27', '#E24B4A', '#7F77DD'] }],
+    datasets: [{ data: catData, backgroundColor: ['#178FDD', '#639922', '#1D9E75', '#EF9F27', '#E24B4A', '#7F77DD'] }],
+  };
+
+  const lineData = {
+    labels: ['Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan'],
+    datasets: [
+      { label: 'Reported', data: [180, 220, 195, 310, 280, stats.total], borderColor: '#178FDD', tension: 0.4, fill: false },
+      { label: 'Resolved', data: [120, 170, 155, 240, 230, stats.resolved], borderColor: '#639922', tension: 0.4, fill: false, borderDash: [6, 3] },
+    ],
   };
 
   const risks = [
-    { label: 'Flood Risk', pct: 82, reason: 'Heavy rain + blocked drainage', color: '#E24B4A' },
-    { label: 'Road Damage', pct: 65, reason: 'Multiple cluster complaints', color: '#EF9F27' },
-    { label: 'Power Outage', pct: 41, reason: 'Street light failures increasing', color: '#EF9F27' },
-    { label: 'Water Crisis', pct: 28, reason: 'Pipe leakages in 3 wards', color: '#639922' },
+    { label: 'Flood Risk', pct: Math.min(stats.critical * 10, 95), reason: 'Based on critical issues count', color: '#E24B4A' },
+    { label: 'Road Damage', pct: Math.min(catData[0] * 20, 90), reason: 'Road complaints in system', color: '#EF9F27' },
+    { label: 'Water Crisis', pct: Math.min(catData[2] * 20, 80), reason: 'Water supply issues reported', color: '#178FDD' },
+    { label: 'Sewage Risk', pct: Math.min(catData[4] * 20, 75), reason: 'Sewage overflow reports', color: '#639922' },
   ];
 
   const insightColors = {
@@ -95,10 +116,15 @@ export default function Dashboard() {
       <h2 style={{ marginBottom: 20, fontSize: 20 }}>📊 AI Insights Dashboard</h2>
 
       <div className="grid-3" style={{ marginBottom: 20 }}>
-        {[['Total Issues', '1,284', '#178FDD'], ['Resolved', '73%', '#639922'], ['Critical', '47', '#E24B4A']].map(([l, v, c]) => (
+        {[
+          ['Total Issues', stats.total, '#178FDD'],
+          ['Resolved', `${resolvedPct}%`, '#639922'],
+          ['Critical', stats.critical, '#E24B4A']
+        ].map(([l, v, c]) => (
           <div key={l} className="card" style={{ textAlign: 'center' }}>
             <div style={{ fontSize: 28, fontWeight: 700, color: c }}>{v}</div>
             <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>{l}</div>
+            <div style={{ fontSize: 10, color: '#aaa', marginTop: 2 }}>🔥 Live from Firebase</div>
           </div>
         ))}
       </div>
@@ -107,11 +133,8 @@ export default function Dashboard() {
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <h3 style={{ fontSize: 14 }}>🤖 AI-Generated Insights</h3>
-            <button
-              onClick={refreshInsights}
-              disabled={aiLoading}
-              style={{ fontSize: 11, padding: '4px 10px', background: '#178FDD', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }}
-            >
+            <button onClick={refreshInsights} disabled={aiLoading}
+              style={{ fontSize: 11, padding: '4px 10px', background: '#178FDD', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }}>
               {aiLoading ? '⏳ Loading...' : '🔄 Refresh AI'}
             </button>
           </div>
@@ -145,18 +168,23 @@ export default function Dashboard() {
           <Line data={lineData} options={{ responsive: true, plugins: { legend: { position: 'top' } } }} />
         </div>
         <div className="card">
-          <h3 style={{ fontSize: 14, marginBottom: 12 }}>🏷️ Issues by Category</h3>
+          <h3 style={{ fontSize: 14, marginBottom: 12 }}>🏷️ Issues by Category (Real)</h3>
           <Doughnut data={doughnutData} options={{ responsive: true, plugins: { legend: { position: 'right' } } }} />
         </div>
       </div>
 
       <div className="card" style={{ marginTop: 16 }}>
-        <h3 style={{ fontSize: 14, marginBottom: 12 }}>📍 Most Affected Areas</h3>
-        {[['Andheri East', 234, 100], ['Kurla West', 189, 81], ['Dadar', 156, 67], ['Bandra East', 98, 42], ['Mulund', 72, 31]].map(([area, count, pct]) => (
-          <div key={area} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
-            <div style={{ width: 100, fontSize: 13, fontWeight: 500 }}>{area}</div>
+        <h3 style={{ fontSize: 14, marginBottom: 12 }}>📊 Real Stats Summary</h3>
+        {[
+          ['Total Reported', stats.total],
+          ['Pending', stats.pending],
+          ['Resolved', stats.resolved],
+          ['Critical', stats.critical],
+        ].map(([label, count]) => (
+          <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+            <div style={{ width: 100, fontSize: 13, fontWeight: 500 }}>{label}</div>
             <div style={{ flex: 1, background: '#f0f4f8', borderRadius: 4, height: 8, overflow: 'hidden' }}>
-              <div style={{ width: `${pct}%`, height: '100%', background: '#178FDD', borderRadius: 4 }} />
+              <div style={{ width: `${stats.total > 0 ? (count / stats.total) * 100 : 0}%`, height: '100%', background: '#178FDD', borderRadius: 4 }} />
             </div>
             <div style={{ fontSize: 13, fontWeight: 600, color: '#178FDD', width: 40 }}>{count}</div>
           </div>

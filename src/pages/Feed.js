@@ -1,57 +1,94 @@
-import React, { useState } from 'react';
-
-const issues = [
-  { title: 'Large pothole near Andheri Station', cat: 'Road', loc: 'Andheri West', sev: 'Critical', status: 'Open', votes: 142, img: '🕳️', time: '2h ago', comments: 18 },
-  { title: 'Garbage pile near Kurla market', cat: 'Garbage', loc: 'Kurla', sev: 'High', status: 'In Progress', votes: 98, img: '🗑️', time: '4h ago', comments: 11 },
-  { title: 'Water leakage — Bandra road', cat: 'Water', loc: 'Bandra East', sev: 'High', status: 'Open', votes: 76, img: '💧', time: '6h ago', comments: 7 },
-  { title: 'Street light out for 3 days', cat: 'Light', loc: 'Dadar', sev: 'Medium', status: 'Assigned', votes: 54, img: '💡', time: '1d ago', comments: 5 },
-  { title: 'Sewage overflow near school', cat: 'Sewage', loc: 'Mulund', sev: 'Critical', status: 'Open', votes: 189, img: '⚠️', time: '30m ago', comments: 24 },
-];
+import React, { useState, useEffect } from 'react';
+import { db } from '../firebase';
+import { collection, onSnapshot, orderBy, query, doc, updateDoc, increment } from 'firebase/firestore';
 
 const sevBadge = { Critical: 'badge-red', High: 'badge-orange', Medium: 'badge-blue', Low: 'badge-green' };
 const stBadge = { Open: 'badge-red', 'In Progress': 'badge-orange', Assigned: 'badge-blue', Resolved: 'badge-green' };
+const catEmoji = { 'Road Damage': '🕳️', 'Garbage': '🗑️', 'Water Supply': '💧', 'Street Light': '💡', 'Sewage': '⚠️', 'Other': '📌' };
 
 export default function Feed() {
+  const [issues, setIssues] = useState([]);
   const [sort, setSort] = useState('Newest');
+  const [loading, setLoading] = useState(true);
   const [voted, setVoted] = useState({});
 
+  useEffect(() => {
+    const q = query(collection(db, 'issues'), orderBy('timestamp', 'desc'));
+    const unsub = onSnapshot(q, (snap) => {
+      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setIssues(data);
+      setLoading(false);
+    });
+    return () => unsub();
+  }, []);
+
+  const handleVote = async (id, currentVotes) => {
+    if (voted[id]) return;
+    await updateDoc(doc(db, 'issues', id), { votes: increment(1) });
+    setVoted(v => ({ ...v, [id]: true }));
+  };
+
   const sorted = [...issues].sort((a, b) => {
-    if (sort === 'Most Voted') return b.votes - a.votes;
-    if (sort === 'Critical First') return (a.sev === 'Critical' ? -1 : 1);
+    if (sort === 'Most Voted') return (b.votes || 0) - (a.votes || 0);
+    if (sort === 'Critical First') return a.severity === 'Critical' ? -1 : 1;
     return 0;
   });
+
+  if (loading) return (
+    <div style={{ textAlign: 'center', padding: 60 }}>
+      <div style={{ fontSize: 40, marginBottom: 12 }}>🔄</div>
+      <div style={{ color: '#178FDD', fontWeight: 600 }}>Loading real issues from Firebase...</div>
+    </div>
+  );
 
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <h2 style={{ fontSize: 20, flex: 1 }}>📋 Issues Feed</h2>
+        <h2 style={{ fontSize: 20, flex: 1 }}>📋 Issues Feed
+          <span style={{ fontSize: 12, color: '#639922', marginLeft: 8, fontWeight: 600 }}>● Live ({issues.length} issues)</span>
+        </h2>
         <select style={{ padding: '6px 12px', border: '1px solid #ddd', borderRadius: 8, fontSize: 13 }} onChange={e => setSort(e.target.value)}>
           <option>Newest</option><option>Most Voted</option><option>Critical First</option>
         </select>
       </div>
-      {sorted.map((iss, i) => (
-        <div key={i} className="card">
-          <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
-            <div style={{ width: 64, height: 64, borderRadius: 10, background: '#f0f4f8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, flexShrink: 0 }}>{iss.img}</div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>{iss.title}</div>
-              <div style={{ fontSize: 12, color: '#888', marginBottom: 6 }}>📍 {iss.loc} · {iss.time}</div>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <span className={`badge ${sevBadge[iss.sev]}`}>{iss.sev}</span>
-                <span className={`badge ${stBadge[iss.status]}`}>{iss.status}</span>
-                <span className="badge badge-purple">{iss.cat}</span>
+
+      {sorted.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: 40, color: '#888' }}>
+          <div style={{ fontSize: 40 }}>📭</div>
+          <div>No issues yet. Be the first to report!</div>
+        </div>
+      ) : (
+        sorted.map((iss) => (
+          <div key={iss.id} className="card">
+            <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
+              <div style={{ width: 64, height: 64, borderRadius: 10, background: '#f0f4f8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, flexShrink: 0 }}>
+                {catEmoji[iss.category] || '📌'}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>{iss.title}</div>
+                <div style={{ fontSize: 12, color: '#888', marginBottom: 6 }}>
+                  📍 {iss.location} · {iss.timestamp ? new Date(iss.timestamp.seconds * 1000).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : 'Just now'}
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <span className={`badge ${sevBadge[iss.severity] || 'badge-blue'}`}>{iss.severity}</span>
+                  <span className={`badge ${stBadge[iss.status] || 'badge-blue'}`}>{iss.status}</span>
+                  <span className="badge badge-purple">{iss.category}</span>
+                </div>
               </div>
             </div>
+            <div style={{ fontSize: 12, color: '#666', marginBottom: 8, background: '#f8f9fa', padding: '6px 10px', borderRadius: 6 }}>
+              🤖 AI: {iss.issue} · Dept: {iss.department}
+            </div>
+            <div style={{ display: 'flex', gap: 12, borderTop: '1px solid #f0f4f8', paddingTop: 10 }}>
+              <button onClick={() => handleVote(iss.id, iss.votes)} style={{ background: voted[iss.id] ? '#E6F1FB' : 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: voted[iss.id] ? '#178FDD' : '#666', padding: '4px 8px', borderRadius: 6, fontWeight: voted[iss.id] ? 600 : 400 }}>
+                👍 {iss.votes || 0} Support
+              </button>
+              <span style={{ fontSize: 12, color: '#888', padding: '4px 8px' }}>🎯 Priority: {iss.priority}/10</span>
+              <span style={{ fontSize: 12, color: '#888', padding: '4px 8px' }}>⏱️ {iss.time}</span>
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: 12, borderTop: '1px solid #f0f4f8', paddingTop: 10 }}>
-            <button onClick={() => setVoted(v => ({ ...v, [i]: !v[i] }))} style={{ background: voted[i] ? '#E6F1FB' : 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: voted[i] ? '#178FDD' : '#666', padding: '4px 8px', borderRadius: 6, fontWeight: voted[i] ? 600 : 400 }}>
-              👍 {iss.votes + (voted[i] ? 1 : 0)} Support
-            </button>
-            <button style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#666', padding: '4px 8px' }}>💬 {iss.comments} Comments</button>
-            <button style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#666', padding: '4px 8px' }}>🔗 Share</button>
-          </div>
-        </div>
-      ))}
+        ))
+      )}
     </div>
   );
 }

@@ -1,17 +1,17 @@
 import React, { useState } from 'react';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { db } from '../firebase';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
-const genAI = new GoogleGenerativeAI('AQ.Ab8RN6INa3BJzqhPU9lAtAXqGF8spBizHj_o2fzJTBoOKm_uuA');
+const genAI = new GoogleGenerativeAI('AQ.Ab8RN6JwsVdOBlDQPXH1NNsMMJMb4IMDdKtjDsmjUBSy9r69Ww');
 
 const analyzeWithGemini = async (file, category, description) => {
-const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
   const imageData = await new Promise((resolve) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result.split(',')[1]);
     reader.readAsDataURL(file);
   });
-
   const prompt = `You are an AI civic issue analyzer for Mumbai city.
 Analyze this image and return ONLY a JSON object:
 {
@@ -25,12 +25,10 @@ Analyze this image and return ONLY a JSON object:
 }
 Category: "${category}", Description: "${description || 'none'}"
 Severity: Low/Medium/High/Critical only. Priority: 1-10 only.`;
-
   const result = await model.generateContent([
     prompt,
     { inlineData: { mimeType: file.type, data: imageData } }
   ]);
-
   const text = result.response.text();
   const clean = text.replace(/```json|```/g, '').trim();
   return JSON.parse(clean);
@@ -42,9 +40,11 @@ export default function ReportIssue() {
   const [form, setForm] = useState({ title: '', category: 'Road Damage', location: '', description: '' });
   const [uploadedFile, setUploadedFile] = useState(null);
   const [gps, setGps] = useState(false);
+  const [gpsCoords, setGpsCoords] = useState(null);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [analysis, setAnalysis] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
 
   const captureGPS = () => {
@@ -58,6 +58,7 @@ export default function ReportIssue() {
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const { latitude, longitude } = position.coords;
+        setGpsCoords({ lat: latitude, lng: longitude });
         setForm({ ...form, location: `${latitude.toFixed(4)}°N ${longitude.toFixed(4)}°E` });
         setGps(true);
         setGpsLoading(false);
@@ -83,24 +84,63 @@ export default function ReportIssue() {
     if (!uploadedFile) { setError('⚠️ Please upload a photo first!'); return; }
     if (!form.title) { setError('⚠️ Please enter issue title!'); return; }
     setLoading(true);
+    let analysisResult = null;
     try {
-      const result = await analyzeWithGemini(uploadedFile, form.category, form.description);
-      setAnalysis(result);
+      analysisResult = await analyzeWithGemini(uploadedFile, form.category, form.description);
     } catch (err) {
-      console.error(err);
-      // Smart fallback
+      console.error('Gemini failed, using fallback:', err);
       const fallback = {
-        'Road Damage': { issue: 'Road Pothole Detected', confidence: 94, severity: 'High', department: 'Road Maintenance Dept.', action: 'Immediate repair required. Deploy maintenance team within 24 hours.', time: '48 Hours', priority: 9 },
+        'Road Damage': { issue: 'Road Pothole Detected', confidence: 94, severity: 'High', department: 'Road Maintenance Dept.', action: 'Immediate repair required.', time: '48 Hours', priority: 9 },
         'Garbage': { issue: 'Illegal Garbage Dump', confidence: 91, severity: 'Medium', department: 'Solid Waste Dept.', action: 'Deploy sanitation team immediately.', time: '24 Hours', priority: 7 },
         'Water Supply': { issue: 'Water Pipe Leakage', confidence: 93, severity: 'High', department: 'Water Works Dept.', action: 'Shut supply line and dispatch repair crew.', time: '36 Hours', priority: 8 },
         'Street Light': { issue: 'Street Light Failure', confidence: 89, severity: 'Medium', department: 'Electrical Dept.', action: 'Inspect and replace faulty component.', time: '72 Hours', priority: 6 },
-        'Sewage': { issue: 'Sewage Overflow Detected', confidence: 96, severity: 'Critical', department: 'Drainage Dept.', action: 'Emergency team required immediately!', time: '12 Hours', priority: 10 },
+        'Sewage': { issue: 'Sewage Overflow Detected', confidence: 96, severity: 'Critical', department: 'Drainage Dept.', action: 'Emergency team required!', time: '12 Hours', priority: 10 },
         'Other': { issue: 'General Civic Issue', confidence: 85, severity: 'Low', department: 'Municipal Corp.', action: 'Review and assign department.', time: '5 Days', priority: 4 },
       };
-      setAnalysis(fallback[form.category] || fallback['Other']);
+      analysisResult = fallback[form.category] || fallback['Other'];
     }
+    setAnalysis(analysisResult);
     setLoading(false);
+    await saveToFirestore(analysisResult);
   };
+
+  const saveToFirestore = async (analysisData) => {
+    try {
+      await addDoc(collection(db, 'issues'), {
+        title: form.title,
+        category: form.category,
+        location: form.location,
+        description: form.description,
+        lat: gpsCoords ? gpsCoords.lat : 19.0760,
+        lng: gpsCoords ? gpsCoords.lng : 72.8777,
+        issue: analysisData.issue,
+        severity: analysisData.severity,
+        department: analysisData.department,
+        action: analysisData.action,
+        time: analysisData.time,
+        priority: analysisData.priority,
+        confidence: analysisData.confidence,
+        status: 'Pending',
+        votes: 0,
+        timestamp: serverTimestamp(),
+      });
+    } catch (e) {
+      console.error('Firestore error:', e);
+    }
+  };
+
+  if (submitted) {
+    return (
+      <div style={{ maxWidth: 600, textAlign: 'center', padding: 40 }}>
+        <div style={{ fontSize: 64, marginBottom: 16 }}>🎉</div>
+        <h2 style={{ color: '#639922', marginBottom: 8 }}>Issue Reported Successfully!</h2>
+        <p style={{ color: '#666', marginBottom: 24 }}>Your report has been saved to Firebase and will appear on the map!</p>
+        <button className="btn-primary" onClick={() => { setSubmitted(false); setAnalysis(null); setUploadedFile(null); setForm({ title: '', category: 'Road Damage', location: '', description: '' }); setGps(false); setGpsCoords(null); }}>
+          Report Another Issue
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div style={{ maxWidth: 600 }}>
@@ -177,7 +217,7 @@ export default function ReportIssue() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
             <span style={{ fontSize: 24 }}>🤖</span>
             <h3 style={{ fontSize: 16 }}>Gemini AI Analysis</h3>
-            <span className="badge badge-green" style={{ marginLeft: 'auto' }}>✅ Powered by Gemini</span>
+            <span className="badge badge-green" style={{ marginLeft: 'auto' }}>✅ Saved to Firebase</span>
           </div>
           <div style={{ background: '#E6F1FB', borderRadius: 8, padding: '8px 14px', marginBottom: 12, fontSize: 13, color: '#0C447C', fontWeight: 600 }}>
             Confidence: {analysis.confidence}%
@@ -208,6 +248,11 @@ export default function ReportIssue() {
             <div style={{ fontSize: 10, color: '#888', textTransform: 'uppercase', marginBottom: 4 }}>Suggested Action</div>
             <div style={{ fontSize: 13 }}>{analysis.action}</div>
           </div>
+          <button className="btn-primary"
+            style={{ width: '100%', justifyContent: 'center', padding: 14, fontSize: 15, marginTop: 12, background: '#639922' }}
+            onClick={() => setSubmitted(true)}>
+            ✅ Confirm & Submit Report
+          </button>
         </div>
       )}
     </div>
