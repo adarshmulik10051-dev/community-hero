@@ -1,40 +1,50 @@
 import React, { useEffect, useState } from 'react';
 import { Bar } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Tooltip, Legend } from 'chart.js';
+import { db } from '../firebase';
+import { collection, onSnapshot } from 'firebase/firestore';
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend);
 
-const targets = [1284, 939, 187, 47, 3842, 358];
-const labels = ['Total Issues', 'Resolved', 'In Progress', 'Critical', 'Citizens', 'Open'];
 const colors = ['#178FDD', '#639922', '#EF9F27', '#E24B4A', '#1D9E75', '#7F77DD'];
+const labels = ['Total Issues', 'Resolved', 'In Progress', 'Critical', 'Pending', 'Open'];
 
 export default function Home({ setActivePage }) {
-  const [counts, setCounts] = useState([0, 0, 0, 0, 0, 0]);
+  const [stats, setStats] = useState([0, 0, 0, 0, 0, 0]);
+  const [weekData, setWeekData] = useState([0,0,0,0,0,0,0]);
 
   useEffect(() => {
-    const ivs = targets.map((target, i) => {
-      const step = Math.ceil(target / 50);
-      return setInterval(() => {
-        setCounts(prev => {
-          const next = [...prev];
-          next[i] = Math.min(next[i] + step, target);
-          return next;
-        });
-      }, 30);
+    const unsub = onSnapshot(collection(db, 'issues'), (snap) => {
+      const issues = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const total = issues.length;
+      const resolved = issues.filter(i => i.status === 'Resolved').length;
+      const inProgress = issues.filter(i => i.status === 'In Progress').length;
+      const critical = issues.filter(i => i.severity === 'Critical').length;
+      const pending = issues.filter(i => i.status === 'Pending').length;
+      const open = issues.filter(i => i.status === 'Open').length;
+      setStats([total, resolved, inProgress, critical, pending, open]);
+
+      // Weekly trend - last 7 days
+      const days = [0,0,0,0,0,0,0];
+      issues.forEach(issue => {
+        if (issue.timestamp) {
+          const diff = Math.floor((Date.now() - issue.timestamp.seconds * 1000) / (1000 * 60 * 60 * 24));
+          if (diff >= 0 && diff < 7) days[6 - diff]++;
+        }
+      });
+      setWeekData(days);
     });
-    return () => ivs.forEach(clearInterval);
+    return () => unsub();
   }, []);
 
   const chartData = {
     labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
     datasets: [
-      { label: 'Reported', data: [34, 52, 41, 67, 48, 39, 28], backgroundColor: '#178FDD', borderRadius: 6 },
-      { label: 'Resolved', data: [20, 38, 35, 50, 41, 32, 22], backgroundColor: '#639922', borderRadius: 6 },
+      { label: 'Reported', data: weekData, backgroundColor: '#178FDD', borderRadius: 6 },
     ],
   };
 
   return (
     <div>
-      {/* HERO */}
       <div style={{ background: 'linear-gradient(135deg, #0C5A9C, #178FDD)', borderRadius: 16, padding: '40px 32px', color: 'white', marginBottom: 24, textAlign: 'center' }}>
         <div style={{ fontSize: 13, letterSpacing: '0.1em', opacity: 0.8, marginBottom: 8 }}>AI-POWERED CIVIC INTELLIGENCE PLATFORM</div>
         <h1 style={{ fontSize: 36, fontWeight: 700, marginBottom: 10 }}>Community Hero</h1>
@@ -45,23 +55,21 @@ export default function Home({ setActivePage }) {
         </div>
       </div>
 
-      {/* STATS */}
       <div className="grid-6" style={{ marginBottom: 24 }}>
-        {targets.map((_, i) => (
+        {labels.map((label, i) => (
           <div key={i} className="card" style={{ textAlign: 'center', padding: '16px 8px' }}>
-            <div style={{ fontSize: 26, fontWeight: 700, color: colors[i] }}>{counts[i].toLocaleString()}</div>
-            <div style={{ fontSize: 11, color: '#666', marginTop: 4 }}>{labels[i]}</div>
+            <div style={{ fontSize: 26, fontWeight: 700, color: colors[i] }}>{stats[i].toLocaleString()}</div>
+            <div style={{ fontSize: 11, color: '#666', marginTop: 4 }}>{label}</div>
+            <div style={{ fontSize: 9, color: '#aaa', marginTop: 2 }}>🔥 Live</div>
           </div>
         ))}
       </div>
 
-      {/* CHART */}
       <div className="card">
-        <h3 style={{ marginBottom: 16, fontSize: 15 }}>📈 Weekly Issue Trend</h3>
+        <h3 style={{ marginBottom: 16, fontSize: 15 }}>📈 Weekly Issue Trend (Real)</h3>
         <Bar data={chartData} options={{ responsive: true, plugins: { legend: { position: 'top' } } }} height={80} />
       </div>
 
-      {/* QUICK LINKS */}
       <div className="grid-4" style={{ marginTop: 16 }}>
         {[
           { icon: '🤖', title: 'AI Insights', sub: 'Predictive analytics', page: 'dashboard' },
