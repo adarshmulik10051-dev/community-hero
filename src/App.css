@@ -1,0 +1,33 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', sans-serif; background: #f0f4f8; color: #1a1a2e; }
+.app { min-height: 100vh; }
+.page-content { padding: 20px; max-width: 1200px; margin: 0 auto; }
+
+/* BUTTONS */
+.btn-primary { background: #178FDD; color: white; border: none; padding: 10px 22px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: background 0.2s; }
+.btn-primary:hover { background: #0C5A9C; }
+.btn-secondary { background: white; color: #178FDD; border: 2px solid #178FDD; padding: 10px 22px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+.btn-secondary:hover { background: #178FDD; color: white; }
+.btn-danger { background: #E24B4A; color: white; border: none; padding: 8px 18px; border-radius: 8px; font-size: 13px; cursor: pointer; }
+
+/* CARDS */
+.card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); margin-bottom: 16px; }
+
+/* BADGES */
+.badge { font-size: 11px; padding: 3px 10px; border-radius: 20px; font-weight: 600; display: inline-block; }
+.badge-red { background: #FCEBEB; color: #A32D2D; }
+.badge-orange { background: #FAEEDA; color: #854F0B; }
+.badge-green { background: #EAF3DE; color: #3B6D11; }
+.badge-blue { background: #E6F1FB; color: #0C447C; }
+.badge-purple { background: #EEEDFE; color: #3C3489; }
+
+/* GRID */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.grid-6 { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
+
+@media (max-width: 768px) {
+  .grid-2, .grid-3, .grid-4, .grid-6 { grid-template-columns: 1fr 1fr; }
+  .page-content { padding: 12px; }
+}

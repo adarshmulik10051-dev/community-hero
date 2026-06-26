@@ -1,0 +1,2 @@
+.alert-banner { background: #A32D2D; color: #FAECE7; padding: 8px 20px; font-size: 13px; font-weight: 600; text-align: center; animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.8} }
