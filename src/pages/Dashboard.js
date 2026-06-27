@@ -5,15 +5,20 @@ import { db } from '../firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, ArcElement, Tooltip, Legend);
 
+const GROQ_KEY = process.env.REACT_APP_GROQ_API_KEY;
+
 const getAIInsights = async (stats) => {
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.REACT_APP_GEMINI_KEY}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{
-          parts: [{ text: `You are an AI analyst for a Mumbai civic issue platform.
+  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${GROQ_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'llama-3.1-8b-instant',
+      messages: [{
+        role: 'user',
+        content: `You are an AI analyst for a Mumbai civic issue platform.
 Generate 4 short AI insights based on this REAL data:
 - Total issues: ${stats.total}
 - Critical issues: ${stats.critical}
@@ -21,24 +26,38 @@ Generate 4 short AI insights based on this REAL data:
 - Most common category: ${stats.topCategory}
 - Resolved: ${stats.resolved}
 
-Return ONLY a JSON array with 4 items:
+Return ONLY a JSON array with 4 items, no extra text:
 [
   {"type": "warn", "icon": "📈", "text": "insight text here"},
   {"type": "good", "icon": "📉", "text": "insight text here"},
   {"type": "bad", "icon": "⚠️", "text": "insight text here"},
   {"type": "warn", "icon": "💧", "text": "insight text here"}
 ]
-type must be: good, bad, or warn. Keep each insight under 15 words.` }]
-        }],
-        generationConfig: { temperature: 0.8, maxOutputTokens: 300 }
-      })
-    }
-  );
+type must be: good, bad, or warn. Keep each insight under 15 words.
+IMPORTANT: Return ONLY valid JSON, no markdown, no extra text, no trailing commas, properly escaped quotes.`
+      }],
+      max_tokens: 300
+    })
+  });
   const data = await response.json();
-  const text = data.candidates[0].content.parts[0].text;
-  const clean = text.replace(/```json|```/g, '').trim();
+const text = data.choices[0].message.content;
+let clean = text.replace(/```json|```/g, '').trim();
+
+// JSON cha exact array part extract kara (extra text असेल तर ignore karण्यासाठी)
+const match = clean.match(/\[[\s\S]*\]/);
+if (match) clean = match[0];
+
+// Common JSON errors fix kara (trailing commas)
+clean = clean.replace(/,(\s*[\]}])/g, '$1');
+
+try {
   return JSON.parse(clean);
+} catch (e) {
+  console.error('JSON parse failed, raw text:', text);
+  throw e;
+}
 };
+
 
 export default function Dashboard() {
   const [issues, setIssues] = useState([]);

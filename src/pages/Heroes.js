@@ -29,20 +29,21 @@ export default function Heroes() {
       const issues = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
       // Group by location - each unique report = points
-      const userMap = {};
-      issues.forEach(issue => {
-        const key = issue.location || 'Unknown';
-        if (!userMap[key]) {
-          userMap[key] = { location: key, reports: 0, resolved: 0, pts: 0 };
-        }
-        userMap[key].reports += 1;
-        userMap[key].pts += 10;
-        if (issue.status === 'Resolved') {
-          userMap[key].resolved += 1;
-          userMap[key].pts += 30;
-        }
-        if (issue.priority >= 8) userMap[key].pts += 10;
-      });
+    const userMap = {};
+issues.forEach(issue => {
+  const rawName = issue.reportedBy || 'Anonymous';
+  const key = rawName.trim().toLowerCase();
+  if (!userMap[key]) {
+    userMap[key] = { location: rawName.trim(), reports: 0, resolved: 0, pts: 0 };
+  }
+  userMap[key].reports += 1;
+  userMap[key].pts += 10;
+  if (issue.status === 'Resolved') {
+    userMap[key].resolved += 1;
+    userMap[key].pts += 30;
+  }
+  if (issue.priority >= 8) userMap[key].pts += 10;
+});
 
       const sorted = Object.values(userMap).sort((a, b) => b.pts - a.pts);
       setHeroes(sorted);

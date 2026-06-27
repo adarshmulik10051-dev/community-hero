@@ -1,58 +1,60 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './ChatBot.css';
 
-const GEMINI_API_KEY = 'AQ.Ab8RN6INa3BJzqhPU9lAtAXqGF8spBizHj_o2fzJTBoOKm_uuA';
+const GROQ_KEY = process.env.REACT_APP_GROQ_API_KEY;
 
 const askGemini = async (userMessage) => {
-  const systemContext = `You are a City AI Assistant for Community Hero app in Mumbai, India.
+  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${GROQ_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'llama-3.1-8b-instant',
+      messages: [{
+        role: 'user',
+        content: `You are a City AI Assistant for Community Hero app in Mumbai, India.
 You help citizens with civic issues like potholes, garbage, water leakage, street lights, sewage.
-You know about these current issues:
-- 5 critical potholes in Andheri West
-- Garbage dump in Kurla (In Progress)
-- Water leakage in Bandra East (Open)
-- Sewage overflow in Mulund (Critical)
-- Street light out in Dadar (Assigned)
-- Flood risk 82% in low lying areas
-- Ward B has 89 unresolved issues
-- Andheri East has most complaints this week
+Current issues in the system:
+- Multiple potholes reported in Andheri, Kurla, Kharghar
+- Garbage issues in various areas
+- Water leakage complaints
+- Street light outages
+- Sewage overflow reports
+Answer in 2-3 short, helpful sentences. Be specific to Mumbai civic issues.
+User question: ${userMessage}`
+      }],
+      max_tokens: 200
+    })
+  });
 
-Answer in 2-3 short sentences. Be helpful and specific.`;
-
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': GEMINI_API_KEY
-      },
-      body: JSON.stringify({
-        contents: [
-          { role: 'user', parts: [{ text: systemContext }] },
-          { role: 'model', parts: [{ text: 'I am City AI Assistant. I will help you with civic issues in Mumbai.' }] },
-          { role: 'user', parts: [{ text: userMessage }] }
-        ],
-        generationConfig: { temperature: 0.7, maxOutputTokens: 200 }
-      })
-    }
-  );
-
-  if (!response.ok) throw new Error('API Error');
+  if (!response.ok) {
+    const err = await response.json();
+    throw new Error(err?.error?.message || 'API Error');
+  }
   const data = await response.json();
-  return data.candidates[0].content.parts[0].text;
+  return data.choices[0].message.content;
 };
 
 export default function ChatBot() {
   const [open, setOpen] = useState(false);
-  const [msgs, setMsgs] = useState([{ from: 'ai', text: '👋 Hello! I am your City AI Assistant. Ask me about issues, departments, or civic help!' }]);
+  const [msgs, setMsgs] = useState([{
+    from: 'ai',
+    text: '👋 Hello! I am your City AI Assistant. Ask me about issues, departments, or civic help!'
+  }]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const msgsEndRef = useRef(null);
+
+  useEffect(() => {
+    msgsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [msgs]);
 
   const send = async () => {
     if (!input.trim() || loading) return;
-    const userMsg = { from: 'user', text: input };
-    setMsgs(m => [...m, userMsg]);
-    const question = input;
+    const question = input.trim();
+    setMsgs(m => [...m, { from: 'user', text: question }]);
     setInput('');
     setLoading(true);
 
@@ -60,7 +62,17 @@ export default function ChatBot() {
       const reply = await askGemini(question);
       setMsgs(m => [...m, { from: 'ai', text: reply }]);
     } catch (err) {
-      setMsgs(m => [...m, { from: 'ai', text: '⚠️ Sorry, I am having trouble connecting. Please try again.' }]);
+      // Rate limit किंवा error असेल तर smart fallback
+      const fallbacks = {
+        'pothole': '🕳️ Potholes should be reported with a photo and GPS location. Road Maintenance Dept typically resolves them in 48-72 hours. You can report at the Report section!',
+        'garbage': '🗑️ Garbage issues are handled by Solid Waste Management. Report with photo for faster action. High-priority areas get resolved in 24 hours.',
+        'water': '💧 Water supply issues are handled by Mumbai Water Works. Report with location for fastest resolution.',
+        'light': '💡 Street light issues are handled by the Electrical Department. Usually resolved within 24-48 hours.',
+        'sewage': '⚠️ Sewage overflow is a Critical issue! Drainage department is alerted immediately for such reports.',
+      };
+      const key = Object.keys(fallbacks).find(k => question.toLowerCase().includes(k));
+      const fallbackMsg = key ? fallbacks[key] : '🤖 I can help with civic issues like potholes, garbage, water, lights, and sewage. What specific issue are you facing in Mumbai?';
+      setMsgs(m => [...m, { from: 'ai', text: fallbackMsg }]);
     }
     setLoading(false);
   };
@@ -78,6 +90,7 @@ export default function ChatBot() {
               <div key={i} className={`msg msg-${m.from}`}>{m.text}</div>
             ))}
             {loading && <div className="msg msg-ai">🤖 Thinking...</div>}
+            <div ref={msgsEndRef} />
           </div>
           <div className="chat-input-row">
             <input
