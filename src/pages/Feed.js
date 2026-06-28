@@ -113,11 +113,16 @@ export default function Feed() {
             </button>
             <button onClick={() => handleFalse(iss.id)}
               style={{ background: falseRep[iss.id] ? '#FBE6E6' : 'none', border: '1px solid #ddd', cursor: 'pointer', fontSize: 13, color: falseRep[iss.id] ? '#e74c3c' : '#666', padding: '4px 8px', borderRadius: 6 }}>
-              ❌ False Report
+              ❌ {iss.falseReports || 0} False Report
             </button>
             {(iss.confirms || 0) >= 5 && (
               <span style={{ background: '#22a722', color: 'white', fontSize: 11, padding: '3px 8px', borderRadius: 20, fontWeight: 700 }}>
                 🏅 Community Verified
+              </span>
+            )}
+            {(iss.falseReports || 0) >= 5 && (
+              <span style={{ background: '#e74c3c', color: 'white', fontSize: 11, padding: '3px 8px', borderRadius: 20, fontWeight: 700 }}>
+                ⚠️ Fake Report
               </span>
             )}
             <span style={{ fontSize: 12, color: '#888', padding: '4px 8px' }}>🎯 Priority: {iss.priority}/10</span>
