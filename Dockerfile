@@ -3,8 +3,8 @@ WORKDIR /app
 COPY package.json ./
 RUN npm install
 COPY . .
-RUN echo "REACT_APP_GROQ_API_KEY=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" > .env
-RUN npm run build
+ARG REACT_APP_GROQ_API_KEY
+RUN REACT_APP_GROQ_API_KEY=$REACT_APP_GROQ_API_KEY npm run build
 
 FROM nginx:alpine
 COPY --from=build /app/build /usr/share/nginx/html
