@@ -209,6 +209,20 @@ export default function Dashboard() {
           </div>
         ))}
       </div>
+      <div className="card" style={{ marginTop: 16, border: '2px solid #178FDD' }}>
+  <h3 style={{ fontSize: 14, marginBottom: 12, color: '#178FDD' }}>🚨 AI Agent Recommendations</h3>
+  {[
+    { icon: '🛣️', text: `${catData[0]} road damage issues detected — Assign additional PWD workers immediately`, color: '#EF9F27' },
+    { icon: '🗑️', text: `${catData[1]} garbage complaints pending — Schedule emergency cleanup in affected zones`, color: '#E24B4A' },
+    { icon: '⚡', text: `${stats.pending} issues unresolved for 48+ hours — Escalate to senior officers`, color: '#E24B4A' },
+    { icon: '✅', text: `${stats.resolved} issues resolved — Community satisfaction improving`, color: '#639922' },
+  ].map((r, i) => (
+    <div key={i} style={{ display: 'flex', gap: 10, padding: '10px 12px', marginBottom: 8, background: '#f8f9fa', borderRadius: 8, fontSize: 13 }}>
+      <span style={{ fontSize: 18 }}>{r.icon}</span>
+      <span style={{ color: r.color, fontWeight: 600 }}>{r.text}</span>
+    </div>
+  ))}
+</div>
     </div>
   );
 }

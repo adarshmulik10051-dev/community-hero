@@ -10,7 +10,9 @@ export default function Feed() {
   const [issues, setIssues] = useState([]);
   const [sort, setSort] = useState('Newest');
   const [loading, setLoading] = useState(true);
-  const [voted, setVoted] = useState({});
+  const [voted, setVoted] = useState(() => JSON.parse(localStorage.getItem('ch_voted') || '{}'));
+  const [confirmed, setConfirmed] = useState(() => JSON.parse(localStorage.getItem('ch_confirmed') || '{}'));
+  const [falseRep, setFalseRep] = useState(() => JSON.parse(localStorage.getItem('ch_false') || '{}'));
 
   useEffect(() => {
     const q = query(collection(db, 'issues'), orderBy('timestamp', 'desc'));
@@ -25,7 +27,25 @@ export default function Feed() {
   const handleVote = async (id) => {
     if (voted[id]) return;
     await updateDoc(doc(db, 'issues', id), { votes: increment(1) });
-    setVoted(v => ({ ...v, [id]: true }));
+    const updated = { ...voted, [id]: true };
+    setVoted(updated);
+    localStorage.setItem('ch_voted', JSON.stringify(updated));
+  };
+
+  const handleConfirm = async (id) => {
+    if (confirmed[id]) return;
+    await updateDoc(doc(db, 'issues', id), { confirms: increment(1) });
+    const updated = { ...confirmed, [id]: true };
+    setConfirmed(updated);
+    localStorage.setItem('ch_confirmed', JSON.stringify(updated));
+  };
+
+  const handleFalse = async (id) => {
+    if (falseRep[id]) return;
+    await updateDoc(doc(db, 'issues', id), { falseReports: increment(1) });
+    const updated = { ...falseRep, [id]: true };
+    setFalseRep(updated);
+    localStorage.setItem('ch_false', JSON.stringify(updated));
   };
 
   const sorted = [...issues].sort((a, b) => {
@@ -55,8 +75,6 @@ export default function Feed() {
       {sorted.map((iss) => (
         <div key={iss.id} className="card" style={{ marginBottom: 12 }}>
           <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
-
-            {/* REAL IMAGE किंवा emoji */}
             <div style={{ width: 72, height: 72, borderRadius: 10, overflow: 'hidden', flexShrink: 0, background: '#f0f4f8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               {iss.imageURL ? (
                 <img src={iss.imageURL} alt={iss.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -84,11 +102,24 @@ export default function Feed() {
             </div>
           )}
 
-          <div style={{ display: 'flex', gap: 12, borderTop: '1px solid #f0f4f8', paddingTop: 10 }}>
+          <div style={{ display: 'flex', gap: 12, borderTop: '1px solid #f0f4f8', paddingTop: 10, flexWrap: 'wrap', alignItems: 'center' }}>
             <button onClick={() => handleVote(iss.id)}
               style={{ background: voted[iss.id] ? '#E6F1FB' : 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: voted[iss.id] ? '#178FDD' : '#666', padding: '4px 8px', borderRadius: 6, fontWeight: voted[iss.id] ? 600 : 400 }}>
               👍 {iss.votes || 0} Support
             </button>
+            <button onClick={() => handleConfirm(iss.id)}
+              style={{ background: confirmed[iss.id] ? '#E6FBE6' : 'none', border: '1px solid #ddd', cursor: 'pointer', fontSize: 13, color: confirmed[iss.id] ? '#22a722' : '#666', padding: '4px 8px', borderRadius: 6 }}>
+              ✅ {iss.confirms || 0} Confirm
+            </button>
+            <button onClick={() => handleFalse(iss.id)}
+              style={{ background: falseRep[iss.id] ? '#FBE6E6' : 'none', border: '1px solid #ddd', cursor: 'pointer', fontSize: 13, color: falseRep[iss.id] ? '#e74c3c' : '#666', padding: '4px 8px', borderRadius: 6 }}>
+              ❌ False Report
+            </button>
+            {(iss.confirms || 0) >= 5 && (
+              <span style={{ background: '#22a722', color: 'white', fontSize: 11, padding: '3px 8px', borderRadius: 20, fontWeight: 700 }}>
+                🏅 Community Verified
+              </span>
+            )}
             <span style={{ fontSize: 12, color: '#888', padding: '4px 8px' }}>🎯 Priority: {iss.priority}/10</span>
             <span style={{ fontSize: 12, color: '#888', padding: '4px 8px' }}>⏱️ {iss.time}</span>
           </div>

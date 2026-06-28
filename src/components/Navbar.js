@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import './Navbar.css';
 
 const labels = {
@@ -8,6 +8,7 @@ const labels = {
 };
 
 export default function Navbar({ activePage, setActivePage, lang, setLang }) {
+  const [menuOpen, setMenuOpen] = useState(false);
   const L = labels[lang];
   const tabs = ['home','report','map','feed','dashboard','gallery','heroes','admin'];
   const icons = { home:'🏠', report:'📝', map:'🗺️', feed:'📋', dashboard:'📊', gallery:'🖼️', heroes:'🏆', admin:'⚙️' };
@@ -15,20 +16,41 @@ export default function Navbar({ activePage, setActivePage, lang, setLang }) {
   return (
     <nav className="navbar">
       <div className="nav-brand">🛡️ Community Hero</div>
-      <div className="nav-tabs">
+      
+      {/* Desktop tabs */}
+      <div className="nav-tabs desktop-only">
         {tabs.map(tab => (
           <button key={tab} className={`nav-tab ${activePage === tab ? 'active' : ''}`} onClick={() => setActivePage(tab)}>
             {icons[tab]} {L[tab]}
           </button>
         ))}
       </div>
-      <div className="lang-switch">
-        {['en','hi','mr'].map(l => (
-          <button key={l} className={`lang-btn ${lang === l ? 'active' : ''}`} onClick={() => setLang(l)}>
-            {l === 'en' ? 'EN' : l === 'hi' ? 'हि' : 'म'}
-          </button>
-        ))}
+
+      <div className="nav-right">
+        <div className="lang-switch">
+          {['en','hi','mr'].map(l => (
+            <button key={l} className={`lang-btn ${lang === l ? 'active' : ''}`} onClick={() => setLang(l)}>
+              {l === 'en' ? 'EN' : l === 'hi' ? 'हि' : 'म'}
+            </button>
+          ))}
+        </div>
+        {/* Hamburger */}
+        <button className="hamburger" onClick={() => setMenuOpen(!menuOpen)}>
+          {menuOpen ? '✕' : '☰'}
+        </button>
       </div>
+
+      {/* Mobile menu */}
+      {menuOpen && (
+        <div className="mobile-menu">
+          {tabs.map(tab => (
+            <button key={tab} className={`mobile-tab ${activePage === tab ? 'active' : ''}`} 
+              onClick={() => { setActivePage(tab); setMenuOpen(false); }}>
+              {icons[tab]} {L[tab]}
+            </button>
+          ))}
+        </div>
+      )}
     </nav>
   );
 }
