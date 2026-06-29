@@ -50,11 +50,15 @@ const analyzeWithGroq = async (file, category, description) => {
             image_url: { url: `data:${file.type};base64,${imageData}` }
           },
           {
-            type: 'text',
-            text: `You are an AI civic issue analyzer for Mumbai city. Analyze this image and return ONLY a JSON object with no extra text:
+           text: `You are an AI civic issue analyzer for Mumbai city. Analyze this image and return ONLY a JSON object with no extra text:
 {"issue":"detected issue name","confidence":95,"severity":"High","department":"Department name","action":"Suggested action","time":"48 Hours","priority":9}
 Category: "${category}", Description: "${description || 'none'}"
-Severity must be: Low/Medium/High/Critical only. Priority must be: 1-10 only.`
+Severity rules:
+- Critical: sewage overflow, flooding, collapsed road, fire, major accident (priority 9-10)
+- High: large pothole, broken pipe, garbage dump (priority 7-8)
+- Medium: street light failure, minor damage (priority 5-6)
+- Low: minor issues (priority 1-4)
+Return ONLY JSON, no extra text.`
           }
         ]
       }],

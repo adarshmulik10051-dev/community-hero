@@ -7,6 +7,7 @@ export default function AdminPanel() {
   const [pass, setPass] = useState('');
   const [issues, setIssues] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [uploadingId, setUploadingId] = useState(null);
 
   useEffect(() => {
     if (!loggedIn) return;
@@ -25,6 +26,27 @@ export default function AdminPanel() {
     } catch (err) {
       alert('Update failed: ' + err.message);
     }
+  };
+
+  const uploadAfterImage = async (issueId, file) => {
+    setUploadingId(issueId);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('upload_preset', 'community_hero');
+      const res = await fetch('https://api.cloudinary.com/v1_1/ddbdnciti/image/upload', {
+        method: 'POST', body: formData
+      });
+      const data = await res.json();
+      await updateDoc(doc(db, 'issues', issueId), {
+        afterImageURL: data.secure_url,
+        resolvedAt: new Date().toISOString()
+      });
+      alert('✅ After image uploaded! Gallery updated!');
+    } catch (e) {
+      alert('Upload failed: ' + e.message);
+    }
+    setUploadingId(null);
   };
 
   if (!loggedIn) return (
@@ -80,16 +102,21 @@ export default function AdminPanel() {
         <div style={{ textAlign: 'center', padding: 40, color: '#888' }}>No issues in Firebase.</div>
       ) : (
         issues.map(iss => (
-          <div key={iss.id} className="card" style={{ marginBottom: 12 }}>
+          <div key={iss.id} className="card" style={{ marginBottom: 12, border: iss.status === 'Resolved' ? '2px solid #639922' : '1px solid #eee' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-              <div>
+              <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 600, fontSize: 14 }}>{iss.title}</div>
                 <div style={{ fontSize: 12, color: '#888' }}>📍 {iss.location} · 👍 {iss.votes || 0} votes</div>
+                {iss.imageURL && (
+                  <img src={iss.imageURL} alt="before"
+                    style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 6, marginTop: 6, border: '2px solid #E24B4A' }} />
+                )}
               </div>
               <span className={`badge ${iss.severity === 'Critical' ? 'badge-red' : iss.severity === 'High' ? 'badge-orange' : 'badge-blue'}`}>
                 {iss.severity}
               </span>
             </div>
+
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
               <select
                 style={{ padding: '6px 10px', border: '1px solid #ddd', borderRadius: 6, fontSize: 13 }}
@@ -113,6 +140,31 @@ export default function AdminPanel() {
               </select>
               <span style={{ fontSize: 11, color: '#639922' }}>✅ Auto-saves to Firebase</span>
             </div>
+
+            {/* After Image Upload - Resolved issues saathi */}
+            {iss.status === 'Resolved' && (
+              <div style={{ marginTop: 12, padding: 10, background: '#EAF3DE', borderRadius: 8 }}>
+                {iss.afterImageURL ? (
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                    <img src={iss.afterImageURL} alt="after"
+                      style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 6, border: '2px solid #639922' }} />
+                    <span style={{ fontSize: 12, color: '#639922', fontWeight: 600 }}>✅ After image uploaded - Visible in Gallery!</span>
+                  </div>
+                ) : (
+                  <div>
+                    <div style={{ fontSize: 12, color: '#2D5A00', fontWeight: 600, marginBottom: 6 }}>
+                      📸 Upload After Image for Gallery
+                    </div>
+                    <input type="file" accept="image/*" id={`after-${iss.id}`} style={{ display: 'none' }}
+                      onChange={e => uploadAfterImage(iss.id, e.target.files[0])} />
+                    <label htmlFor={`after-${iss.id}`}
+                      style={{ background: '#639922', color: 'white', padding: '6px 14px', borderRadius: 6, fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>
+                      {uploadingId === iss.id ? '⏳ Uploading...' : '📸 Upload After Image'}
+                    </label>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         ))
       )}

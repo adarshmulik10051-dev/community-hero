@@ -18,46 +18,35 @@ const getAIInsights = async (stats) => {
       model: 'llama-3.1-8b-instant',
       messages: [{
         role: 'user',
-        content: `You are an AI analyst for a Mumbai civic issue platform.
-Generate 4 short AI insights based on this REAL data:
-- Total issues: ${stats.total}
-- Critical issues: ${stats.critical}
-- Pending issues: ${stats.pending}
-- Most common category: ${stats.topCategory}
-- Resolved: ${stats.resolved}
+        content: `Return ONLY this JSON array with 4 items, no other text, no markdown:
+[{"type":"warn","icon":"📈","text":"${stats.pending} issues pending resolution in Mumbai"},{"type":"good","icon":"📉","text":"${stats.resolved} issues resolved successfully"},{"type":"bad","icon":"⚠️","text":"${stats.topCategory} is most reported issue category"},{"type":"warn","icon":"💧","text":"${stats.total} total civic issues reported"}]
 
-Return ONLY a JSON array with 4 items, no extra text:
-[
-  {"type": "warn", "icon": "📈", "text": "insight text here"},
-  {"type": "good", "icon": "📉", "text": "insight text here"},
-  {"type": "bad", "icon": "⚠️", "text": "insight text here"},
-  {"type": "warn", "icon": "💧", "text": "insight text here"}
-]
-type must be: good, bad, or warn. Keep each insight under 15 words.
-IMPORTANT: Return ONLY valid JSON, no markdown, no extra text, no trailing commas, properly escaped quotes.`
+Replace the text values with better insights using this data: Total:${stats.total} Critical:${stats.critical} Pending:${stats.pending} Category:${stats.topCategory} Resolved:${stats.resolved}
+Keep text under 8 words. Keep icons exactly as shown. Return ONLY JSON.`
       }],
       max_tokens: 300
     })
   });
   const data = await response.json();
-const text = data.choices[0].message.content;
-let clean = text.replace(/```json|```/g, '').trim();
-
-// JSON cha exact array part extract kara (extra text असेल तर ignore karण्यासाठी)
-const match = clean.match(/\[[\s\S]*\]/);
-if (match) clean = match[0];
-
-// Common JSON errors fix kara (trailing commas)
-clean = clean.replace(/,(\s*[\]}])/g, '$1');
-
-try {
-  return JSON.parse(clean);
-} catch (e) {
-  console.error('JSON parse failed, raw text:', text);
-  throw e;
-}
+  const text = data.choices[0].message.content;
+  let clean = text.replace(/```json|```/g, '').trim();
+  const match = clean.match(/\[[\s\S]*\]/);
+  if (match) clean = match[0];
+  clean = clean.replace(/,(\s*[\]}])/g, '$1');
+  try {
+    if (!clean.endsWith(']')) {
+      clean = clean.substring(0, clean.lastIndexOf('}') + 1) + ']';
+    }
+    return JSON.parse(clean);
+  } catch (e) {
+    return [
+      { icon: '📈', text: `${stats.pending} issues pending resolution`, type: 'warn' },
+      { icon: '📉', text: `${stats.resolved} issues resolved successfully`, type: 'good' },
+      { icon: '⚠️', text: `${stats.topCategory} most reported category`, type: 'bad' },
+      { icon: '💧', text: `${stats.total} total civic issues reported`, type: 'warn' },
+    ];
+  }
 };
-
 
 export default function Dashboard() {
   const [issues, setIssues] = useState([]);
@@ -75,16 +64,13 @@ export default function Dashboard() {
     const unsub = onSnapshot(collection(db, 'issues'), (snap) => {
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       setIssues(data);
-
       const total = data.length;
       const critical = data.filter(i => i.severity === 'Critical').length;
       const resolved = data.filter(i => i.status === 'Resolved').length;
       const pending = data.filter(i => i.status === 'Pending').length;
-
       const cats = ['Road Damage', 'Garbage', 'Water Supply', 'Street Light', 'Sewage', 'Other'];
       const counts = cats.map(c => data.filter(i => i.category === c).length);
       setCatData(counts);
-
       const topCategory = cats[counts.indexOf(Math.max(...counts))] || 'Road Damage';
       setStats({ total, critical, resolved, pending, topCategory });
     });
@@ -133,7 +119,6 @@ export default function Dashboard() {
   return (
     <div>
       <h2 style={{ marginBottom: 20, fontSize: 20 }}>📊 AI Insights Dashboard</h2>
-
       <div className="grid-3" style={{ marginBottom: 20 }}>
         {[
           ['Total Issues', stats.total, '#178FDD'],
@@ -147,7 +132,6 @@ export default function Dashboard() {
           </div>
         ))}
       </div>
-
       <div className="grid-2" style={{ marginBottom: 20 }}>
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
@@ -163,7 +147,6 @@ export default function Dashboard() {
             </div>
           ))}
         </div>
-
         <div className="card">
           <h3 style={{ fontSize: 14, marginBottom: 12 }}>🎯 Predictive Risk Analysis</h3>
           {risks.map((r, i) => (
@@ -180,7 +163,6 @@ export default function Dashboard() {
           ))}
         </div>
       </div>
-
       <div className="grid-2">
         <div className="card">
           <h3 style={{ fontSize: 14, marginBottom: 12 }}>📈 Monthly Trend</h3>
@@ -191,7 +173,6 @@ export default function Dashboard() {
           <Doughnut data={doughnutData} options={{ responsive: true, plugins: { legend: { position: 'right' } } }} />
         </div>
       </div>
-
       <div className="card" style={{ marginTop: 16 }}>
         <h3 style={{ fontSize: 14, marginBottom: 12 }}>📊 Real Stats Summary</h3>
         {[
@@ -210,19 +191,19 @@ export default function Dashboard() {
         ))}
       </div>
       <div className="card" style={{ marginTop: 16, border: '2px solid #178FDD' }}>
-  <h3 style={{ fontSize: 14, marginBottom: 12, color: '#178FDD' }}>🚨 AI Agent Recommendations</h3>
-  {[
-    { icon: '🛣️', text: `${catData[0]} road damage issues detected — Assign additional PWD workers immediately`, color: '#EF9F27' },
-    { icon: '🗑️', text: `${catData[1]} garbage complaints pending — Schedule emergency cleanup in affected zones`, color: '#E24B4A' },
-    { icon: '⚡', text: `${stats.pending} issues unresolved for 48+ hours — Escalate to senior officers`, color: '#E24B4A' },
-    { icon: '✅', text: `${stats.resolved} issues resolved — Community satisfaction improving`, color: '#639922' },
-  ].map((r, i) => (
-    <div key={i} style={{ display: 'flex', gap: 10, padding: '10px 12px', marginBottom: 8, background: '#f8f9fa', borderRadius: 8, fontSize: 13 }}>
-      <span style={{ fontSize: 18 }}>{r.icon}</span>
-      <span style={{ color: r.color, fontWeight: 600 }}>{r.text}</span>
-    </div>
-  ))}
-</div>
+        <h3 style={{ fontSize: 14, marginBottom: 12, color: '#178FDD' }}>🚨 AI Agent Recommendations</h3>
+        {[
+          { icon: '🛣️', text: `${catData[0]} road damage issues — Assign PWD workers immediately`, color: '#EF9F27' },
+          { icon: '🗑️', text: `${catData[1]} garbage complaints — Schedule emergency cleanup`, color: '#E24B4A' },
+          { icon: '⚡', text: `${stats.pending} issues unresolved 48+ hours — Escalate now`, color: '#E24B4A' },
+          { icon: '✅', text: `${stats.resolved} issues resolved — Community satisfaction improving`, color: '#639922' },
+        ].map((r, i) => (
+          <div key={i} style={{ display: 'flex', gap: 10, padding: '10px 12px', marginBottom: 8, background: '#f8f9fa', borderRadius: 8, fontSize: 13 }}>
+            <span style={{ fontSize: 18 }}>{r.icon}</span>
+            <span style={{ color: r.color, fontWeight: 600 }}>{r.text}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
