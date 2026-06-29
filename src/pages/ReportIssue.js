@@ -50,7 +50,8 @@ const analyzeWithGroq = async (file, category, description) => {
             image_url: { url: `data:${file.type};base64,${imageData}` }
           },
           {
-           text: `You are an AI civic issue analyzer for Mumbai city. Analyze this image and return ONLY a JSON object with no extra text:
+            type: 'text',
+            text: `You are an AI civic issue analyzer for Mumbai city. Analyze this image and return ONLY a JSON object with no extra text:
 {"issue":"detected issue name","confidence":95,"severity":"High","department":"Department name","action":"Suggested action","time":"48 Hours","priority":9}
 Category: "${category}", Description: "${description || 'none'}"
 Severity rules:
